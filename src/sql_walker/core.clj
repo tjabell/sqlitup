@@ -105,9 +105,30 @@
   (not (is-entity? t)))
 
 (defn walk-database
-  [t]
-  (-> (query-get-columns t)
-      (case (is-entity?))))
+  [start-t]
+  (let [already-walked []
+        inserted-values {}]
+    (defn walk-table
+      [t]
+      (defn deal-with-pk
+        [t col]
+        nil)
+      (defn deal-with-fk
+        [t col]
+        (case
+            (is-entity? (query-get-parent-table t col))
+          (if (.contains already-walked t)
+            (get-inserted-value t)
+            (walk-table (query-get-parent-table t col)))
+          (is-lookup? t)
+          (get-lookup-value )))
+      (defn deal-with-col
+        [t col]
+        (case (is-pk? col) (deal-with-pk t col)
+              (is-fk? col) (deal-with-fk-col t col)
+              :else (deal-with-primitive-col t col)))
+      (let [cols  (query-get-columns start-t)]
+        ()))))
 
 ;; from https://stackoverflow.com/questions/925738/how-to-find-foreign-key-dependencies-in-sql-server
 ;;   SELECT
