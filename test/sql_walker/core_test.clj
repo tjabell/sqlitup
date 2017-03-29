@@ -10,11 +10,3 @@
            :numeric_scale nil,
            :column_default nil}))
 
-(deftest making-up-data
-  (testing "Generating dummy data for a column"
-    (is (= "int" (get-dummy-data (first c)))))
-  (testing "Generate dummy data for table columns"
-    (is (= '("int") (generate-data c)))))
-
-
-

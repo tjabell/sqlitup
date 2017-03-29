@@ -31,11 +31,12 @@
 
 (def entity-tables '("AcdhhApplicationComment" "AcdhhAZTEDP_Applications" "AcdhhContacts" "AcdhhEquipment" "AcdhhEquipmentHistory" "AcdhhLicensure_ApplicationDeficiencies" "AcdhhLicensure_ApplicationFiles" "AcdhhLicensure_Applications" "AcdhhTransactionAdditionalReasons" "AcdhhTransactions" "AcdhhVouchers"))
 
-
-(def get-key-sql (str
+(def query-get-foreign-key-sql
+  (str
 "    SELECT"
 "    FK_Table = FK.TABLE_NAME,"
 "    FK_Column = CU.COLUMN_NAME,"
+"    FK_TYPE = FK.CONSTRAINT_TYPE,"
 "    PK_Table = PK.TABLE_NAME,"
 "    PK_Column = PT.COLUMN_NAME,"
 "    Constraint_Name = C.CONSTRAINT_NAME"
@@ -60,62 +61,54 @@
 "           ) PT"
 "    ON PT.TABLE_NAME = PK.TABLE_NAME"))
 
-(defn get-constraints
+(defn query-get-constraints
   [t]
-  (q (str
-      get-key-sql
-      " WHERE FK.TABLE_NAME = "
-      t)))
+  (qm (str
+      query-get-foreign-key-sql
+      " WHERE FK.TABLE_NAME = '" t "'")))
 
-(defn get-edges [t]
-  (get-constraints t))
+(defn query-get-primary-key
+  [t]
+  (qm (str
+       "select * from information_schema.table_constraints tc"
+       " left join information_schema.key_column_usage cu"
+       " on tc.constraint_name = cu.constraint_name"
+       " where tc.table_name = '" t "'"
+       " and constraint_type = 'PRIMARY KEY'")))
 
-(defn bigint-generator-function [col-spec] 1)
-(defn bit-generator-function [col-spec] 1)
-(defn datetime-generator-function [col-spec] "date")
-(defn decimal-generator-function [col-spec] "decimal")
-(defn int-generator-function [col-spec] "int")
-(defn nvarchar-generator-function [col-spec] "nvarchar")
-(defn smallint-generator-function [col-spec] "smallint")
-(defn tinyint-generator-function [col-spec] "tinyint")
-(defn uniqueidentifier-generator-function [col-spec] "uniqueidentifier")
-(defn varbinary-generator-function [col-spec] "varbinary")
+(defn query-get-columns
+  [t]
+  (qm
+   (str
+    "select column_name from information_schema.columns where table_name = '" t "'")))
 
-(def column-types
-  {"bigint" bigint-generator-function
-   "bit" bit-generator-function
-   "datetime" datetime-generator-function
-   "decimal" decimal-generator-function
-   "int" int-generator-function
-   "nvarchar" nvarchar-generator-function
-   "smallint" smallint-generator-function
-   "tinyint" tinyint-generator-function
-   "uniqueidentifier" uniqueidentifier-generator-function
-   "varbinary" varbinary-generator-function})
+(defn is-pk?
+  [t c]
+  (let [pks (query-get-primary-key t)]
+    (.contains (map :column_name pks) (:column_name c))))
 
-(defn get-dummy-data
-  "Fills a column with dummy data"
-  [column]
-  ((get column-types (:data_type column)) column))
-
-(defn generate-data
-  "Gets columns from a table"
-  [columns]
-  (->> columns
-       (map get-dummy-data)))
-
+(defn is-fk?
+  [t c]
+  (let [fks (query-get-constraints t)]
+    (.contains (map :fk_column fks) (:column_name  c))))
 
 (defn retrieve-columns
   [table]
   (query (str "select data_type, column_name, numeric_scale, column_default from information_schema.columns where table_name = '" table "'")))
 
-(defn fill-table
-  "Fills up a table with values, grabs first value of parent table or errors"
-  [table]
-  (->> (retrieve-columns table)
-       (generate-data)))
+(defn is-entity?
+  [t]
+  (.contains entity-tables t))
 
-    
+(defn is-lookup?
+  [t]
+  (not (is-entity? t)))
+
+(defn walk-database
+  [t]
+  (-> (query-get-columns t)
+      (case (is-entity?))))
+
 ;; from https://stackoverflow.com/questions/925738/how-to-find-foreign-key-dependencies-in-sql-server
 ;;   SELECT
 ;;     FK_Table = FK.TABLE_NAME,
@@ -143,4 +136,3 @@
 ;;                 i1.CONSTRAINT_TYPE = 'PRIMARY KEY'
 ;;            ) PT
 ;;     ON PT.TABLE_NAME = PK.TABLE_NAME
-
