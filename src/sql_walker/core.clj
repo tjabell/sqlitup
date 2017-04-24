@@ -3,6 +3,9 @@
             [clojure.java.jdbc :as j]
             [sql-walker.config :as config]))
 
+(def nl "
+")
+
 (def db config/db)
 
 (defn q
@@ -10,8 +13,10 @@
   (j/query db query))
 
 (def query q)
+
 (def qm
   (memoize q))
+
 (defn s
   [t]
   (q (str "select * from " t)))
@@ -31,7 +36,7 @@
 
 (def entity-tables '("AcdhhApplicationComment" "AcdhhAZTEDP_Applications" "AcdhhContacts" "AcdhhEquipment" "AcdhhEquipmentHistory" "AcdhhLicensure_ApplicationDeficiencies" "AcdhhLicensure_ApplicationFiles" "AcdhhLicensure_Applications" "AcdhhTransactionAdditionalReasons" "AcdhhTransactions" "AcdhhVouchers"))
 
-(def query-get-foreign-key-sql
+(def query-get-foreign-keys-sql
   (str
 "    SELECT"
 "    FK_Table = FK.TABLE_NAME,"
@@ -67,6 +72,8 @@
       query-get-foreign-key-sql
       " WHERE FK.TABLE_NAME = '" t "'")))
 
+
+
 (defn query-get-primary-key
   [t]
   (qm (str
@@ -75,6 +82,7 @@
        " on tc.constraint_name = cu.constraint_name"
        " where tc.table_name = '" t "'"
        " and constraint_type = 'PRIMARY KEY'")))
+
 
 (defn query-get-columns
   [t]
@@ -104,31 +112,58 @@
   [t]
   (not (is-entity? t)))
 
+(defn sw-get-foreign-key
+  [t col]
+  (first (filter (fn [fk] (= (:fk_column fk) col)) (query-get-constraints t))))
+
 (defn walk-database
   [start-t]
-  (let [already-walked []
-        inserted-values {}]
+  (let [already-walked (transient [])
+        inserted-values (transient {})]
     (defn walk-table
       [t]
+      (defn get-inserted-value
+        "Retrieves the primary key of an inserted entity"
+        [t]
+        (print "get-inserted-value " t nl))
+
+      (defn get-lookup-value
+        [t]
+        (print "get-lookup-value " t nl))
+
+      (defn query-get-parent-table
+        [t col]
+        (print "query-get-parent-table " t col nl))
+
+      (defn get-lookup-value
+        [t]
+        (print "get-lookup-value " t nl))
+      (defn deal-with-primitive
+        [t col]
+        (print "deal with primitive " t col nl))
       (defn deal-with-pk
         [t col]
-        nil)
+        (print "deal with pk: " t col nl))
       (defn deal-with-fk
         [t col]
-        (case
-            (is-entity? (query-get-parent-table t col))
-          (if (.contains already-walked t)
-            (get-inserted-value t)
-            (walk-table (query-get-parent-table t col)))
-          (is-lookup? t)
-          (get-lookup-value )))
+        (print "deal with fk: " t col nl)
+        (let [parent (:pk_table (sw-get-foreign-key t (:column_name col)))]
+          (cond
+            (is-entity? parent)
+            (if (.contains (persistent! already-walked) parent)
+              (get-inserted-value parent)
+              (walk-table parent))
+            (is-lookup? t) (get-lookup-value parent))))
       (defn deal-with-col
-        [t col]
-        (case (is-pk? col) (deal-with-pk t col)
-              (is-fk? col) (deal-with-fk-col t col)
-              :else (deal-with-primitive-col t col)))
+        [col]
+        (cond (is-pk? t col) (deal-with-pk t col)
+              (is-fk? t col) (deal-with-fk t col)
+              :else (deal-with-primitive t col)))
+
       (let [cols  (query-get-columns start-t)]
-        ()))))
+        (map deal-with-col cols)))
+    (walk-table start-t)))
+
 
 ;; from https://stackoverflow.com/questions/925738/how-to-find-foreign-key-dependencies-in-sql-server
 ;;   SELECT
