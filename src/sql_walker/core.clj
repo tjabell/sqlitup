@@ -66,13 +66,12 @@
 "           ) PT"
 "    ON PT.TABLE_NAME = PK.TABLE_NAME"))
 
+
 (defn query-get-constraints
   [t]
   (qm (str
-      query-get-foreign-key-sql
+      query-get-foreign-keys-sql
       " WHERE FK.TABLE_NAME = '" t "'")))
-
-
 
 (defn query-get-primary-key
   [t]
